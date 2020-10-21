@@ -41,9 +41,6 @@ spec = describe "Freedocs" $ do
             let prop_InsertEmptyTree node = forAll genEmptyTree $ \emptyTree -> forAll genOrderedPositions $ \(lower, upper) -> insert node lower upper emptyTree == Empty
             quickCheck prop_InsertEmptyTree
 
-        -- TODO : You're trying to insert in a position where there might already be a node.
-        --        In the paper, this case is handled through the major/mini node distinction.
-        --        Go ahead and implement that.
         it "upon insertion a tree's node count is incremented" $ do
             let prop_LengthTreeIncerment node = forAll (genNonEmptyTree 2) $ \tree -> (countNodes (insert node [Zero] [Zero, One] tree)) == countNodes tree + 1
             quickCheck prop_LengthTreeIncerment

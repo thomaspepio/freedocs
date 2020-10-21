@@ -20,7 +20,7 @@ data Node = Node Atom User
 --data NonEmpty
 data Tree where
     Empty  :: Tree
-    Branch :: { node :: Node
+    Branch :: { nodes :: [Node]
               , left :: Tree
               , right :: Tree } 
               -> Tree
@@ -41,24 +41,25 @@ insert node lower upper tree
     | lower <? upper = case (hasDescendants lower tree, hasDescendants upper tree) of
         (False, _) -> insertAt node (lower ++ [One]) tree
         (_, False) -> insertAt node (upper ++ [Zero]) tree
-        _          -> tree
+        _          -> insertAt node lower tree -- TODO : hmm sure about that one ?
     | otherwise             = tree
 
 insertAt :: Node -> Position -> Tree -> Tree
-insertAt node (_:[]) Empty                           = newTree node
+insertAt node _ Empty                                = newTree node
+insertAt node [] (Branch content left right)         = Branch (node : content) left right
 insertAt node (Zero:[]) (Branch content Empty Empty) = Branch content (newTree node) Empty
 insertAt node (One:[]) (Branch content Empty Empty)  = Branch content Empty (newTree node)
 insertAt node (Zero:ids) (Branch content left right) = Branch content (insertAt node ids left) right
 insertAt node (One:ids) (Branch content left right)  = Branch content left (insertAt node ids right)
 
 newTree :: Node -> Tree
-newTree node = Branch node Empty Empty
+newTree node = Branch [node] Empty Empty
 
 hasDescendants :: Position -> Tree -> Bool
-hasDescendants _ Empty                      = False
-hasDescendants (Zero:[]) (Branch _ Empty _) = False
-hasDescendants (One:[]) (Branch _ _ Empty)  = False
-hasDescendants (One:[]) (Branch _ left right) = True
+hasDescendants _ Empty                         = False
+hasDescendants (Zero:[]) (Branch _ Empty _)    = False
+hasDescendants (One:[]) (Branch _ _ Empty)     = False
+hasDescendants (One:[]) (Branch _ left right)  = True
 hasDescendants (Zero:[]) (Branch _ left right) = True
 hasDescendants (id:ids) (Branch _ left right)
     | id == Zero = hasDescendants ids left
@@ -97,4 +98,4 @@ deepestPosition (Branch _ left right)  =
 
 countNodes :: Tree -> Int
 countNodes Empty                 = 0
-countNodes (Branch _ left right) = 1 + (countNodes left) + (countNodes right)
+countNodes (Branch nodes left right) = length nodes + (countNodes left) + (countNodes right)

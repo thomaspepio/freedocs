@@ -16,18 +16,18 @@ genNonEmptyTree depth
         node <- genNode
         left <- genTreeWithNoChilds
         right <- genTreeWithNoChilds
-        return $ Branch node left right
+        return $ Branch [node] left right
     | otherwise = do
         node <- genNode
         left <- oneof [genNonEmptyTree (depth - 1), genEmptyTree]
         right <- oneof [genNonEmptyTree (depth - 1), genEmptyTree]
-        return $ Branch node left right
+        return $ Branch [node] left right
 
 -- | Generator for a tree that has no child (a tree of a single node)
 genTreeWithNoChilds :: Gen Tree
 genTreeWithNoChilds = do
     node <- genNode
-    return $ Branch node Empty Empty
+    return $ Branch [node] Empty Empty
 
 -- | Generator for empty trees
 genEmptyTree :: Gen Tree
