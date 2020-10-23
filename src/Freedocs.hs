@@ -39,28 +39,42 @@ insert :: Node -> Position -> Position -> Tree -> Tree
 insert _ _ _ Empty = Empty
 insert node lower upper tree
     | lower <? upper = case (hasDescendants lower tree, hasDescendants upper tree) of
-        (False, _) -> insertAt node (lower ++ [One]) tree
-        (_, False) -> insertAt node (upper ++ [Zero]) tree
-        _          -> insertAt node lower tree -- TODO : hmm sure about that one ?
+        (False, _) -> newNodeAt node (lower ++ [One]) tree
+        (_, False) -> newNodeAt node (upper ++ [Zero]) tree
+
+        _          -> let nbNodesAtLower = length . nodes $ get lower tree
+                          nbNodesAtUpper = length . nodes $ get upper tree
+                      in if(nbNodesAtLower <= nbNodesAtUpper)
+                            then insertAtExistingNode node lower ToTheLeft tree
+                            else insertAtExistingNode node upper ToTheRight tree
+    
     | otherwise             = tree
 
-insertAt :: Node -> Position -> Tree -> Tree
-insertAt node _ Empty                                = newTree node
-insertAt node [] (Branch content left right)         = Branch (node : content) left right
-insertAt node (Zero:[]) (Branch content Empty Empty) = Branch content (newTree node) Empty
-insertAt node (One:[]) (Branch content Empty Empty)  = Branch content Empty (newTree node)
-insertAt node (Zero:ids) (Branch content left right) = Branch content (insertAt node ids left) right
-insertAt node (One:ids) (Branch content left right)  = Branch content left (insertAt node ids right)
+newNodeAt :: Node -> Position -> Tree -> Tree
+newNodeAt node _ Empty                                = newTree node
+newNodeAt node (Zero:[]) (Branch content Empty Empty) = Branch content (newTree node) Empty
+newNodeAt node (One:[]) (Branch content Empty Empty)  = Branch content Empty (newTree node)
+newNodeAt node (Zero:ids) (Branch content left right) = Branch content (newNodeAt node ids left) right
+newNodeAt node (One:ids) (Branch content left right)  = Branch content left (newNodeAt node ids right)
 
 newTree :: Node -> Tree
 newTree node = Branch [node] Empty Empty
 
+data DirectionForInsert = ToTheLeft | ToTheRight
+insertAtExistingNode :: Node -> Position -> DirectionForInsert -> Tree -> Tree
+insertAtExistingNode _ _ _ Empty                                           = Empty
+insertAtExistingNode node [] ToTheLeft (Branch content left right)         = Branch (content ++ [node]) left right
+insertAtExistingNode node [] ToTheRight (Branch content left right)        = Branch (node : content) left right
+insertAtExistingNode node (Zero:ids) direction (Branch content left right) = Branch content (insertAtExistingNode node ids direction left) right
+insertAtExistingNode node (One:ids) direction (Branch content left right)  = Branch content left (insertAtExistingNode node ids direction right)
+
 hasDescendants :: Position -> Tree -> Bool
 hasDescendants _ Empty                         = False
+hasDescendants [] (Branch _ Empty Empty)       = False
+hasDescendants [] _                            = True
+hasDescendants (_:[]) (Branch _ Empty Empty)   = False
 hasDescendants (Zero:[]) (Branch _ Empty _)    = False
 hasDescendants (One:[]) (Branch _ _ Empty)     = False
-hasDescendants (One:[]) (Branch _ left right)  = True
-hasDescendants (Zero:[]) (Branch _ left right) = True
 hasDescendants (id:ids) (Branch _ left right)
     | id == Zero = hasDescendants ids left
     | id == One  = hasDescendants ids right
@@ -99,3 +113,11 @@ deepestPosition (Branch _ left right)  =
 countNodes :: Tree -> Int
 countNodes Empty                 = 0
 countNodes (Branch nodes left right) = length nodes + (countNodes left) + (countNodes right)
+
+get :: Position -> Tree -> Tree
+get _ Empty                      = Empty
+get [] tree                      = tree
+get (One:[]) (Branch _ _ right)  = right
+get (Zero:[]) (Branch _ left _)  = left
+get (One:ids) (Branch _ _ right) = get ids right
+get (Zero:ids) (Branch _ left _) = get ids left
