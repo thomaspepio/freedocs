@@ -1,13 +1,14 @@
-module FreedocsHelpers(
-    countNodes, deepestPosition,
-    genNonEmptyTree, genTreeWithNoChilds, genEmptyTree,
-    genNode, genPosition, genOrderedPositions, genPositionBefore, genPositionAfter, 
-    genIdentifier
+module TreeHelper(
+    genNode, 
+    genEmptyTree, genNonEmptyTree, genTreeWithNoChilds,
+    leftmostPosition, rightmostPosition, deepestPosition
 ) where
 
 import qualified Data.Text as T
-import Freedocs
-import SpecHelper
+import           Position
+import           PositionHelper
+import           Tree   
+import           SpecHelper
 
 -- | Generator for a non empty tree of a choosen depth
 genNonEmptyTree :: Int -> Gen Tree
@@ -47,30 +48,21 @@ genNode = do
 
 instance Arbitrary Node where arbitrary = genNode
 
-genPosition :: Gen Position
-genPosition = sized $ \n -> do
-    length <- choose (1, n)
-    vectorOf length genIdentifier
+leftmostPosition :: Tree -> Position
+leftmostPosition Empty             = [] 
+leftmostPosition (Branch _ left _) = Zero : leftmostPosition left
 
-genPositionBefore :: Position -> Gen Position
-genPositionBefore position = do
-    generated <- genPosition
-    return $ position <> [Zero] <> generated
+rightmostPosition :: Tree -> Position
+rightmostPosition Empty              = []
+rightmostPosition (Branch _ _ right) = One : rightmostPosition right
 
-genPositionAfter :: Position -> Gen Position
-genPositionAfter position = do
-    generated <- genPosition
-    return $ position <> [One] <> generated
-
-genOrderedPositions :: Gen (Position, Position)
-genOrderedPositions = do
-    position <- genPosition
-    before <- genPositionBefore position
-    after <- genPositionAfter position
-    oneof [genPair before position
-         , genPair position after]
-
-genIdentifier :: Gen Identifier
-genIdentifier = oneof [return Zero, return One]
-
-instance Arbitrary Identifier where arbitrary = genIdentifier
+deepestPosition :: Tree -> Position
+deepestPosition Empty = []
+deepestPosition (Branch _ Empty right) = One : deepestPosition right
+deepestPosition (Branch _ left Empty)  = Zero : deepestPosition left
+deepestPosition (Branch _ left right)  = 
+    let 
+        deepestLeft = Zero : deepestPosition left
+        deepestRight = One : deepestPosition right
+    in
+        if (length deepestLeft) <= (length deepestRight) then deepestRight else deepestLeft

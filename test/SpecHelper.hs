@@ -1,7 +1,7 @@
 module SpecHelper (
   module Test.Hspec,
   module Test.QuickCheck,
-  genPair, genChar, genString
+  genChar, genPair, genString
 ) where
 
 import Test.Hspec

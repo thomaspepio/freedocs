@@ -1,14 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-} 
 {-# LANGUAGE GADTs             #-}
-module Freedocs(
-    User, Atom, 
-    Node(..), Tree(..),
-    Identifier(..), Position,
-    insert, hasDescendants, (<?),
-    leftmostPosition, rightmostPosition, deepestPosition, countNodes
+module Tree(
+    Atom, Node(..), Tree(..), User, 
+    countNodes, hasDescendants, insert
 ) where
 
 import qualified Data.Text as T
+import           Position
 
 type User = T.Text
 type Atom = T.Text
@@ -25,15 +23,6 @@ data Tree where
               , right :: Tree } 
               -> Tree
     deriving(Eq, Show)
-
-data Identifier = Zero | One deriving(Eq, Show)
-instance Ord Identifier where
-    compare Zero Zero = EQ
-    compare One One   = EQ
-    compare Zero One  = LT
-    compare One Zero  = GT
-
-type Position = [Identifier]
 
 insert :: Node -> Position -> Position -> Tree -> Tree
 insert _ _ _ Empty = Empty
@@ -57,9 +46,6 @@ newNodeAt node (One:[]) (Branch content Empty Empty)  = Branch content Empty (ne
 newNodeAt node (Zero:ids) (Branch content left right) = Branch content (newNodeAt node ids left) right
 newNodeAt node (One:ids) (Branch content left right)  = Branch content left (newNodeAt node ids right)
 
-newTree :: Node -> Tree
-newTree node = Branch [node] Empty Empty
-
 data DirectionForInsert = ToTheLeft | ToTheRight
 insertAtExistingNode :: Node -> Position -> DirectionForInsert -> Tree -> Tree
 insertAtExistingNode _ _ _ Empty                                           = Empty
@@ -79,40 +65,8 @@ hasDescendants (id:ids) (Branch _ left right)
     | id == Zero = hasDescendants ids left
     | id == One  = hasDescendants ids right
 
-(<?) :: Position -> Position -> Bool
-(<?) [Zero] [One] = True
-(<?) left right   = case (left `isPrefix` right, right `isPrefix` left) of
-    (True, _) -> head (drop (length left) right) == One
-    (_, True) -> head (drop (length right) left) == Zero
-    (_, _)    -> False
-infixr 5 <?
-
-isPrefix :: Position -> Position -> Bool
-isPrefix [Zero] [One] = True
-isPrefix left right   = take (length left) right == left
-
-leftmostPosition :: Tree -> Position
-leftmostPosition Empty             = [] 
-leftmostPosition (Branch _ left _) = Zero : leftmostPosition left
-
-rightmostPosition :: Tree -> Position
-rightmostPosition Empty              = []
-rightmostPosition (Branch _ _ right) = One : rightmostPosition right
-
-deepestPosition :: Tree -> Position
-deepestPosition Empty = []
-deepestPosition (Branch _ Empty right) = One : deepestPosition right
-deepestPosition (Branch _ left Empty)  = Zero : deepestPosition left
-deepestPosition (Branch _ left right)  = 
-    let 
-        deepestLeft = Zero : deepestPosition left
-        deepestRight = One : deepestPosition right
-    in
-        if (length deepestLeft) <= (length deepestRight) then deepestRight else deepestLeft
-
-countNodes :: Tree -> Int
-countNodes Empty                 = 0
-countNodes (Branch nodes left right) = length nodes + (countNodes left) + (countNodes right)
+newTree :: Node -> Tree
+newTree node = Branch [node] Empty Empty
 
 get :: Position -> Tree -> Tree
 get _ Empty                      = Empty
@@ -121,3 +75,7 @@ get (One:[]) (Branch _ _ right)  = right
 get (Zero:[]) (Branch _ left _)  = left
 get (One:ids) (Branch _ _ right) = get ids right
 get (Zero:ids) (Branch _ left _) = get ids left
+
+countNodes :: Tree -> Int
+countNodes Empty                 = 0
+countNodes (Branch nodes left right) = length nodes + (countNodes left) + (countNodes right)

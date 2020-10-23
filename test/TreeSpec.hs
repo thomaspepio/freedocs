@@ -1,18 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
-module FreedocsSpec where
+module TreeSpec where
 
-import Freedocs
-import FreedocsHelpers
+import Position
+import PositionHelper
+import Tree
+import TreeHelper
 import SpecHelper
 
 spec :: Spec
-spec = describe "Freedocs" $ do
+spec = describe "Tree CRDT spec" $ do
 
-    describe "identifiers and positions" $ do
-        it "order of positions" $ do
-            let prop_Prefixes = forAll genOrderedPositions $ \(lower, upper) -> lower <? upper == True
-            quickCheck prop_Prefixes
-
+    -- TODO : properties about commutativity much ??!!
 
     describe "ascendants and descendents" $ do
         it "an empty tree has no descendants" $ do
@@ -50,15 +48,21 @@ spec = describe "Freedocs" $ do
             -- which states that when inserting an atom between positions p1 and p2, you have to find a position p3 such as p1 < p3 < p2,
             -- and insert either to the left of p1, or the right of p2, depending on whichever has no descendants.
             --
+            -- Problem is : at some point, you _will_ need to insert an atom between two positions that have descendants.
+            --
             -- This test case makes sure that you can insert between nodes that have descendants already, which are called "major nodes" in the paper.
             -- In the example bellow, if we try to insert 'z' between 'b' and 'd', we can see that they both have descendants,
             -- and upon insertion the result should be :
             --
             --  Before insertion :                      After insertion :
-            --    |        d                              |            d
-            --    |    b       f                          |    [b,z]        f
-            --    |  a   c   e   g                        |  a      c     e   g
-            
+            --    |       +--- d ---+                      |       +------- d -------+
+            --    |    +- b -+   +- f -+                   |  +- [b,z] -+         +- f -+
+            --    |    a     c   e     g                   |  a         c         e     g
+            --
+            --
+            --  In terms of text, these two data structure are respectively (we use [] to mark a point in the text where there is concurrence in editing) :
+            --    Before: "abcdefg"
+            --    After : "a[bz]cdefg"
             it "should insert between nodes that have descendants" $ do
                 let tree_withNoMajorNodes = Branch [Node "d" ""]
                                                 (Branch [Node "b" ""]
@@ -80,13 +84,17 @@ spec = describe "Freedocs" $ do
 
 
             -- The test cases also illustrates what should happen when inserting between nodes that are both already major nodes.
-            -- So again, if we try to insert 'z' between 'bwx' and 'dy', we're concerned with which side will welcome the new atom,
-            -- and we choose the one that has the lowest atom count :
+            -- So again, if we try to insert 'z' between 'x' and 'd', we're concerned with which node will welcome the new atom,
+            -- and in an effort to balance things, we choose the one that has the lowest atom count :
             -- 
             -- Before insertion :                       After insertion :          
-            --    |           [d, y]                         |          [z,d,y]
-            --    |   [b,w,x]         f                      |   [b,w,x]         f
-            --    |  a       c      e   g                    |  a       c      e   g
+            --    |        +----- [d, y] -----+            |        +----- [z,d,y] -----+
+            --    |  +- [b,w,x] -+         +- f -+         |  +- [b,w,x] -+          +- f -+
+            --    |  a           c         e      g        |  a           c          e      g
+            --
+            --  In terms of text, these two data structure are respectively (we use [] to mark a point in the text where there is concurrence in editing) :
+            --      Before : "a[bwx]c[dy]efg"
+            --      After  : "a[bwx]c[zdy]efg"
             it "should insert between nodes that have descendants" $ do
                 let tree_withNoMajorNodes = Branch [Node "d" "", Node "y" ""]
                                                 (Branch [Node "b" "", Node "w" "", Node "x" ""]

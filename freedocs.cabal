@@ -27,7 +27,7 @@ executable freedocs
 
 library
   import:              shared-properties
-  exposed-modules:     Freedocs
+  exposed-modules:     Tree, Position
   other-modules:
   -- Directories containing source files.
   hs-source-dirs:      src
@@ -41,7 +41,8 @@ test-suite spec
   type:             exitcode-stdio-1.0
   other-modules:
       SpecHelper 
-    , FreedocsSpec, FreedocsHelpers
+    , TreeSpec, TreeHelper
+    , PositionSpec, PositionHelper
   hs-source-dirs:   test
   main-is:          Spec.hs
   build-depends: 
