@@ -10,39 +10,45 @@ import SpecHelper
 spec :: Spec
 spec = describe "Tree CRDT spec" $ do
 
-    -- TODO : properties about commutativity much ??!!
+    describe "Properties" $ do
+        describe "descendants"$ do
+            it "an empty tree has no descendants" $ do
+                let prop_EmptyTree_HasNoDescendants position = forAll genEmptyTree $ \tree -> hasDescendants position tree == Nothing
+                quickCheck prop_EmptyTree_HasNoDescendants
 
-    describe "ascendants and descendents" $ do
-        it "an empty tree has no descendants" $ do
-            let prop_EmptyTree_HasNoDescendants position = forAll genEmptyTree $ \tree -> hasDescendants position tree == False
-            quickCheck prop_EmptyTree_HasNoDescendants
+            it "the deepest leaf of a non empty tree has no descendants" $ do
+                let prop_NonEmptyTree_HasDescendants = forAll (genNonEmptyTree 2) $ \tree -> let deepest = deepestPosition tree in hasDescendants deepest (get deepest tree) == Nothing
+                quickCheck prop_NonEmptyTree_HasDescendants
 
-        it "the deepest leaf of a non empty tree has no descendants" $ do
-            let prop_NonEmptyTree_HasDescendants = forAll (genNonEmptyTree 5) $ \tree -> hasDescendants (deepestPosition tree) tree == False
-            quickCheck prop_NonEmptyTree_HasDescendants
+            it "leftmost leaf has no descendants" $ do
+                let prop_LeftmostLeafNoDescendants = forAll (genNonEmptyTree 2) $ \tree -> let leftmostPos = leftmostPosition tree in hasDescendants leftmostPos (get leftmostPos tree) == Nothing
+                quickCheck prop_LeftmostLeafNoDescendants
 
-        it "leftmost leaf has no descendants" $ do
-            let prop_LeftmostLeafNoDescendants = forAll (genNonEmptyTree 5) $ \tree -> hasDescendants (leftmostPosition tree) tree == False
-            quickCheck prop_LeftmostLeafNoDescendants
+            it "rightmost leaf has no descendants" $ do
+                let prop_RightmostLeafNoDescendants = forAll (genNonEmptyTree 3) $ \tree -> let rightmostPos = rightmostPosition tree in hasDescendants rightmostPos (get rightmostPos tree) == Nothing
+                quickCheck prop_RightmostLeafNoDescendants
+        
+        describe "insertion of atoms" $ do
+            it "two inserts that refer to different positions can happen in any order" $ do
+                let positionOne = Last One Nothing
+                let positionZero = Last Zero Nothing
+                let prop_Commutativity_InsertAtTwoDifferentPositions node = forAll (genNonEmptyTree 3) $ \tree -> insert node root positionOne (insert node positionZero root tree) == insert node positionZero root (insert node root positionOne tree)
+                quickCheck prop_Commutativity_InsertAtTwoDifferentPositions
+        
+            it "insert does nothing if lower and upper bounds are not ordered" $ do
+                let prop_InsertWith_UnorderedBounds_DoesNothing atom = forAll (genNonEmptyTree 3) $ \tree -> forAll genOrderedPositions $ \(lower, upper) -> insert atom upper lower tree == tree
+                quickCheck prop_InsertWith_UnorderedBounds_DoesNothing
 
-        it "rightmost leaf has no descendants" $ do
-            let prop_RightmostLeafNoDescendants = forAll (genNonEmptyTree 5) $ \tree -> hasDescendants (rightmostPosition tree) tree == False
-            quickCheck prop_RightmostLeafNoDescendants
+            it "inserting an atom in any empty tree yields an empty tree" $ do
+                let prop_InsertEmptyTree atom = forAll genEmptyTree $ \emptyTree -> forAll genOrderedPositions $ \(lower, upper) -> insert atom lower upper emptyTree == Empty
+                quickCheck prop_InsertEmptyTree
+
+            it "upon insertion a tree's atom count is incremented" $ do
+                let prop_LengthTreeIncerment atom = forAll genNonEmptyTreeWithConsecutivePositions $ \(tree, lower, upper) -> (countNodes (insert atom lower upper tree)) == countNodes tree + 1
+                quickCheck prop_LengthTreeIncerment
 
 
-    describe "insert nodes in a tree" $ do
-        it "insert does nothing if lower and upper bounds are not ordered" $ do
-            let prop_InsertWith_UnorderedBounds_DoesNothing node = forAll (genNonEmptyTree 5) $ \tree -> forAll genOrderedPositions $ \(lower, upper) -> insert node upper lower tree == tree
-            quickCheck prop_InsertWith_UnorderedBounds_DoesNothing
-
-        it "inserting a node in any empty tree yields an empty tree" $ do
-            let prop_InsertEmptyTree node = forAll genEmptyTree $ \emptyTree -> forAll genOrderedPositions $ \(lower, upper) -> insert node lower upper emptyTree == Empty
-            quickCheck prop_InsertEmptyTree
-
-        it "upon insertion a tree's node count is incremented" $ do
-            let prop_LengthTreeIncerment node = forAll (genNonEmptyTree 2) $ \tree -> (countNodes (insert node [Zero] [Zero, One] tree)) == countNodes tree + 1
-            quickCheck prop_LengthTreeIncerment
-
+    describe "Examples" $ do
         describe "insertion between bounds that have descendants" $ do
             -- First, a reminder, this code is based on : https://pages.lip6.fr/Marc.Shapiro/papers/icdcs09-treedoc.pdf,
             -- which states that when inserting an atom between positions p1 and p2, you have to find a position p3 such as p1 < p3 < p2,
@@ -63,24 +69,24 @@ spec = describe "Tree CRDT spec" $ do
             --  In terms of text, these two data structure are respectively (we use [] to mark a point in the text where there is concurrence in editing) :
             --    Before: "abcdefg"
             --    After : "a[bz]cdefg"
-            it "should insert between nodes that have descendants" $ do
-                let tree_withNoMajorNodes = Branch [Node "d" ""]
-                                                (Branch [Node "b" ""]
-                                                    (Branch [Node "a" ""] Empty Empty)
-                                                    (Branch [Node "c" ""] Empty Empty))
-                                                (Branch [Node "f" ""]
-                                                    (Branch [Node "e" ""] Empty Empty)
-                                                    (Branch [Node "g" ""] Empty Empty))
+            it "Before = abcdefg / After = a[bz]cdefg" $ do
+                let tree_withNoMajorNodes = Branch (Left "d")
+                                                (Branch (Left "b")
+                                                    (Branch (Left "a") Empty Empty)
+                                                    (Branch (Left "c") Empty Empty))
+                                                (Branch (Left "f")
+                                                    (Branch (Left "e") Empty Empty)
+                                                    (Branch (Left "g") Empty Empty))
                 
-                let tree_AfterInsertion = Branch [Node "d" ""]
-                                                (Branch [Node "b" "", Node "z" ""]
-                                                    (Branch [Node "a" ""] Empty Empty)
-                                                    (Branch [Node "c" ""] Empty Empty))
-                                                (Branch [Node "f" ""]
-                                                    (Branch [Node "e" ""] Empty Empty)
-                                                    (Branch [Node "g" ""] Empty Empty))
+                let tree_AfterInsertion = Branch (Left "d")
+                                                (Branch (Right [(0, "b"), (1, "z")])
+                                                    (Branch (Left "a") Empty Empty)
+                                                    (Branch (Left "c") Empty Empty))
+                                                (Branch (Left "f")
+                                                    (Branch (Left "e") Empty Empty)
+                                                    (Branch (Left "g") Empty Empty))
 
-                insert (Node "z" "") [Zero] [] tree_withNoMajorNodes `shouldBe` tree_AfterInsertion
+                insert "z" (Last Zero Nothing) root tree_withNoMajorNodes `shouldBe` tree_AfterInsertion
 
 
             -- The test cases also illustrates what should happen when inserting between nodes that are both already major nodes.
@@ -95,21 +101,21 @@ spec = describe "Tree CRDT spec" $ do
             --  In terms of text, these two data structure are respectively (we use [] to mark a point in the text where there is concurrence in editing) :
             --      Before : "a[bwx]c[dy]efg"
             --      After  : "a[bwx]c[zdy]efg"
-            it "should insert between nodes that have descendants" $ do
-                let tree_withNoMajorNodes = Branch [Node "d" "", Node "y" ""]
-                                                (Branch [Node "b" "", Node "w" "", Node "x" ""]
-                                                    (Branch [Node "a" ""] Empty Empty)
-                                                    (Branch [Node "c" ""] Empty Empty))
-                                                (Branch [Node "f" ""]
-                                                    (Branch [Node "e" ""] Empty Empty)
-                                                    (Branch [Node "g" ""] Empty Empty))
+            it "Before = a[bwx]c[dy]efg / After = a[bwx]c[zdy]efg" $ do
+                let tree_withNoMajorNodes = Branch (Right [(1, "d"), (2, "y")])
+                                                (Branch (Right [(0, "b"), (1, "w"), (2, "x")])
+                                                    (Branch (Left "a") Empty Empty)
+                                                    (Branch (Left "c") Empty Empty))
+                                                (Branch (Left "f")
+                                                    (Branch (Left "e") Empty Empty)
+                                                    (Branch (Left "g") Empty Empty))
                 
-                let tree_AfterInsertion = Branch [Node "z" "", Node "d" "", Node "y" ""]
-                                                (Branch [Node "b" "", Node "w" "", Node "x" ""]
-                                                    (Branch [Node "a" ""] Empty Empty)
-                                                    (Branch [Node "c" ""] Empty Empty))
-                                                (Branch [Node "f" ""]
-                                                    (Branch [Node "e" ""] Empty Empty)
-                                                    (Branch [Node "g" ""] Empty Empty))
+                let tree_AfterInsertion = Branch (Right [(0, "z"), (1, "d"), (2, "y")])
+                                                (Branch (Right [(0, "b"), (1, "w"), (2, "x")])
+                                                    (Branch (Left "a") Empty Empty)
+                                                    (Branch (Left "c") Empty Empty))
+                                                (Branch (Left "f")
+                                                    (Branch (Left "e") Empty Empty)
+                                                    (Branch (Left "g") Empty Empty))
 
-                insert (Node "z" "") [Zero] [] tree_withNoMajorNodes `shouldBe` tree_AfterInsertion
+                insert "z" (Last Zero Nothing) root tree_withNoMajorNodes `shouldBe` tree_AfterInsertion

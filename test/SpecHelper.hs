@@ -1,19 +1,24 @@
+{-# LANGUAGE OverloadedStrings #-}
 module SpecHelper (
   module Test.Hspec,
   module Test.QuickCheck,
-  genChar, genPair, genString
+  genChar, genPair, genTriple, genText
 ) where
 
-import Test.Hspec
-import Test.QuickCheck
+import qualified Data.Text as T
+import           Test.Hspec
+import           Test.QuickCheck
 
-genPair :: a -> a -> Gen (a, a)
+genPair :: a -> b -> Gen (a, b)
 genPair left right = pure (left, right)
+
+genTriple :: a -> b -> c -> Gen (a, b, c)
+genTriple a b c = pure (a, b, c)
 
 genChar :: Gen Char
 genChar = elements ['a'..'z']
 
-genString :: Int -> Gen String
-genString length = do
+genText :: Int -> Gen T.Text
+genText length = do
   str <- listOf genChar
-  return $ take length str
+  return $ T.pack $ take length str

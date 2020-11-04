@@ -1,81 +1,116 @@
-{-# LANGUAGE OverloadedStrings #-} 
-{-# LANGUAGE GADTs             #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Tree(
-    Atom, Node(..), Tree(..), User, 
-    countNodes, hasDescendants, insert
+    Atom, Tree(..), Direction(..),
+    countNodes, insert, hasDescendants, get
 ) where
 
+import qualified Data.List as L
 import qualified Data.Text as T
 import           Position
 
-type User = T.Text
 type Atom = T.Text
 
-data Node = Node Atom User
-    deriving(Eq, Show)
+data Tree = Empty
+          | Branch { nodes :: Either Atom [(Disambiguator, Atom)]
+                   , left :: Tree
+                   , right :: Tree}
+          deriving(Eq, Show)
 
---data Empty    TODO : for later, if we decide/need to tag trees
---data NonEmpty
-data Tree where
-    Empty  :: Tree
-    Branch :: { nodes :: [Node]
-              , left :: Tree
-              , right :: Tree } 
-              -> Tree
-    deriving(Eq, Show)
+data Direction = Lefty | Righty | Both deriving(Eq, Show)
 
-insert :: Node -> Position -> Position -> Tree -> Tree
+insert :: Atom -> Position -> Position -> Tree -> Tree
 insert _ _ _ Empty = Empty
-insert node lower upper tree
+insert atom lower upper tree
     | lower <? upper = case (hasDescendants lower tree, hasDescendants upper tree) of
-        (False, _) -> newNodeAt node (lower ++ [One]) tree
-        (_, False) -> newNodeAt node (upper ++ [Zero]) tree
+        (Just Lefty, _) -> insertAt atom (lower ++> One) tree
+        (_, Just Righty)  -> insertAt atom (upper ++> Zero) tree
 
-        _          -> let nbNodesAtLower = length . nodes $ get lower tree
-                          nbNodesAtUpper = length . nodes $ get upper tree
-                      in if(nbNodesAtLower <= nbNodesAtUpper)
-                            then insertAtExistingNode node lower ToTheLeft tree
-                            else insertAtExistingNode node upper ToTheRight tree
+        _          -> let nbNodesAtLower = countNodesAt lower tree
+                          nbNodesAtUpper = countNodesAt upper tree
+                      in if(nbNodesAtLower <= nbNodesAtUpper)                                                           -- Not happy with this part.
+                            then if(lower /= root) then insertAt atom lower tree else insertAtRoot atom Righty tree     -- Feels very procedural.
+                            else if(upper /= root) then insertAt atom upper tree else insertAtRoot atom Lefty tree      -- 
     
     | otherwise             = tree
 
-newNodeAt :: Node -> Position -> Tree -> Tree
-newNodeAt node _ Empty                                = newTree node
-newNodeAt node (Zero:[]) (Branch content Empty Empty) = Branch content (newTree node) Empty
-newNodeAt node (One:[]) (Branch content Empty Empty)  = Branch content Empty (newTree node)
-newNodeAt node (Zero:ids) (Branch content left right) = Branch content (newNodeAt node ids left) right
-newNodeAt node (One:ids) (Branch content left right)  = Branch content left (newNodeAt node ids right)
+insertAt :: Atom -> Position -> Tree -> Tree
+insertAt atom _ Empty                                          = newTree atom
+insertAt atom (Last Zero Nothing) (Branch content left right)  = case left of
+    Empty         -> Branch content (leaf atom) right
+    Branch _ _ _  -> Branch content (insertAfterHighestDisambiguator atom left) right
+insertAt atom (Last One Nothing) (Branch content left right)   = case right of
+    Empty -> Branch content left (leaf atom)
+    Branch _ _ _ -> Branch content left (insertBeforeLowestDisambiguator atom right)
+insertAt atom (Last Zero (Just d)) (Branch content left right) = Branch content (insertAtDisambiguator atom d left) right
+insertAt atom (Last One (Just d)) (Branch content left right)  = Branch content left (insertAtDisambiguator atom d right)
+insertAt atom (Zero :> rest) (Branch content left right)       = Branch content (insertAt atom rest left) right
+insertAt atom (One :> rest) (Branch content left right)        = Branch content left (insertAt atom rest right)
 
-data DirectionForInsert = ToTheLeft | ToTheRight
-insertAtExistingNode :: Node -> Position -> DirectionForInsert -> Tree -> Tree
-insertAtExistingNode _ _ _ Empty                                           = Empty
-insertAtExistingNode node [] ToTheLeft (Branch content left right)         = Branch (content ++ [node]) left right
-insertAtExistingNode node [] ToTheRight (Branch content left right)        = Branch (node : content) left right
-insertAtExistingNode node (Zero:ids) direction (Branch content left right) = Branch content (insertAtExistingNode node ids direction left) right
-insertAtExistingNode node (One:ids) direction (Branch content left right)  = Branch content left (insertAtExistingNode node ids direction right)
+insertAtRoot :: Atom -> Direction -> Tree -> Tree
+insertAtRoot atom _ Empty     = newTree atom
+insertAtRoot atom Lefty tree  = insertBeforeLowestDisambiguator atom tree
+insertAtRoot atom Righty tree = insertAfterHighestDisambiguator atom tree
 
-hasDescendants :: Position -> Tree -> Bool
-hasDescendants _ Empty                         = False
-hasDescendants [] (Branch _ Empty Empty)       = False
-hasDescendants [] _                            = True
-hasDescendants (_:[]) (Branch _ Empty Empty)   = False
-hasDescendants (Zero:[]) (Branch _ Empty _)    = False
-hasDescendants (One:[]) (Branch _ _ Empty)     = False
-hasDescendants (id:ids) (Branch _ left right)
-    | id == Zero = hasDescendants ids left
-    | id == One  = hasDescendants ids right
+leaf :: Atom -> Tree
+leaf atom = Branch (Left atom) Empty Empty
 
-newTree :: Node -> Tree
-newTree node = Branch [node] Empty Empty
+insertAfterHighestDisambiguator :: Atom -> Tree -> Tree
+insertAfterHighestDisambiguator atom Empty = insertAtDisambiguator atom 0 Empty
+insertAfterHighestDisambiguator atom tree  = let disambiguator = highestDisambiguator tree 
+                                             in insertAtDisambiguator atom (disambiguator + 1) tree
+
+insertBeforeLowestDisambiguator :: Atom -> Tree -> Tree
+insertBeforeLowestDisambiguator atom Empty = insertAtDisambiguator atom 0 Empty
+insertBeforeLowestDisambiguator atom tree  = let disambiguator = lowestDisambiguator tree 
+                                             in insertAtDisambiguator atom (disambiguator - 1) tree
+
+insertAtDisambiguator :: Atom -> Disambiguator -> Tree -> Tree
+insertAtDisambiguator atom _ Empty                     = leaf atom
+insertAtDisambiguator atom d (Branch nodes left right) = Branch (Right sortedAtoms) left right
+    where 
+        sortedAtoms = case nodes of
+            Left atom'   -> sortByDisambiguator [(d, atom), (0, atom')]
+            Right atoms' -> sortByDisambiguator ((d, atom) : atoms')
+
+lowestDisambiguator :: Tree -> Disambiguator
+lowestDisambiguator Empty                      = 0
+lowestDisambiguator (Branch (Left _) _ _)      = 0
+lowestDisambiguator (Branch (Right atoms) _ _) = fst . head . sortByDisambiguator $ atoms
+
+highestDisambiguator :: Tree -> Disambiguator
+highestDisambiguator Empty                      = 0
+highestDisambiguator (Branch (Left _) _ _)      = 0
+highestDisambiguator (Branch (Right atoms) _ _) = fst . last . sortByDisambiguator $ atoms
+
+sortByDisambiguator :: [(Disambiguator, Atom)] -> [(Disambiguator, Atom)]
+sortByDisambiguator atoms = let byDisambiguator (d, _) (d', _) = compare d d' in L.sortBy byDisambiguator atoms
+
+hasDescendants :: Position -> Tree -> Maybe Direction
+hasDescendants pos tree = case get pos tree of
+    Empty                -> Nothing
+    Branch _ Empty Empty -> Nothing
+    Branch _ _ Empty     -> Just Lefty
+    Branch _ Empty _     -> Just Righty
+    Branch _ _ _         -> Just Both
+
+newTree :: Atom -> Tree
+newTree atom = Branch (Left atom) Empty Empty
 
 get :: Position -> Tree -> Tree
-get _ Empty                      = Empty
-get [] tree                      = tree
-get (One:[]) (Branch _ _ right)  = right
-get (Zero:[]) (Branch _ left _)  = left
-get (One:ids) (Branch _ _ right) = get ids right
-get (Zero:ids) (Branch _ left _) = get ids left
+get _ Empty                               = Empty
+get (Last None _) tree                    = tree
+get (Last One Nothing) (Branch _ _ right) = right
+get (Last Zero Nothing) (Branch _ left _) = left
+get (One :> rest) (Branch _ _ right)      = get rest right
+get (Zero :> rest) (Branch _ left _)      = get rest left
 
 countNodes :: Tree -> Int
-countNodes Empty                 = 0
-countNodes (Branch nodes left right) = length nodes + (countNodes left) + (countNodes right)
+countNodes Empty                             = 0
+countNodes (Branch (Left _) left right)      = 1 + (countNodes left) + (countNodes right)
+countNodes (Branch (Right nodes) left right) = length nodes + (countNodes left) + (countNodes right)
+
+countNodesAt :: Position -> Tree -> Int
+countNodesAt position tree = case get position tree of
+    Empty                    -> 0
+    Branch (Left _) _ _      -> 1
+    Branch (Right nodes) _ _ -> length nodes
